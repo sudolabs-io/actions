@@ -1,0 +1,99 @@
+name: Create Release PR
+
+on:
+  # # Allow manual trigger
+  # workflow_dispatch:
+
+  # # Check on push to staging
+  # push:
+  #   branches:
+  #     - staging
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Check if staging is ahead of main
+        id: check-commits
+        run: |
+          git fetch origin main staging
+          AHEAD_COMMITS=$(git rev-list --count origin/main..origin/staging)
+          echo "ahead_commits=$AHEAD_COMMITS" >> $GITHUB_OUTPUT
+          
+          if [ "$AHEAD_COMMITS" -gt "0" ]; then
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 🔎 Check existing PRs
+        id: check-prs
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Run the script with absolute path
+          node ${GITHUB_WORKSPACE}/.github/scripts/check-existing-prs.js
+      
+      - name: 📝 Run semantic-release to generate changelog
+        id: semantic-release
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Run the script with absolute path
+          node ${GITHUB_WORKSPACE}/.github/scripts/generate-release-notes.js
+      
+      - name: 🏷️ Generate PR title
+        id: generate-title
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        run: |
+          VERSION="${{ steps.semantic-release.outputs.version }}"
+          if [ "$VERSION" == "TBD" ]; then
+            echo "title=🔥 RC: Upcoming Release" >> $GITHUB_OUTPUT
+          else
+            echo "title=🔥 RC: v$VERSION" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 🚀 Create pull request
+        if: steps.check-commits.outputs.has_new_commits == 'true' && steps.check-prs.outputs.has_existing_pr == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ steps.generate-title.outputs.title }}
+          VERSION: ${{ steps.semantic-release.outputs.version }}
+          NOTES: ${{ steps.semantic-release.outputs.notes }}
+          COMMITS_LIST: ${{ steps.semantic-release.outputs.commits_list }}
+        run: |
+          # Run the script with absolute path
+          node ${GITHUB_WORKSPACE}/.github/scripts/create-pull-request.js
+            
+      - name: 🔄 Update existing pull request
+        if: steps.check-commits.outputs.has_new_commits == 'true' && steps.check-prs.outputs.has_existing_pr == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ steps.generate-title.outputs.title }}
+          VERSION: ${{ steps.semantic-release.outputs.version }}
+          NOTES: ${{ steps.semantic-release.outputs.notes }}
+          COMMITS_LIST: ${{ steps.semantic-release.outputs.commits_list }}
+          PR_NUMBER: ${{ steps.check-prs.outputs.pr_number }}
+        run: |
+          # Run the script with absolute path
+          node ${GITHUB_WORKSPACE}/.github/scripts/update-pull-request.js 
