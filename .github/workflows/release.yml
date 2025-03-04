@@ -30,3 +30,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: npx semantic-release 
+        
+      - name: Merge main into staging
+        run: |
+          git checkout staging
+          git merge main
+          git push origin staging
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}

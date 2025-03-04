@@ -65,6 +65,7 @@ The `release.yml` workflow handles the actual release process:
   - Tags the release in the repository
   - Adds comments to all included PRs indicating the release version they were included in
   - Marks all included PRs with a "released" label for easy tracking
+  - Merges `main` back into the `staging`
 
 <a id="required-tokens"></a>
 #### 3️⃣ Required Tokens
